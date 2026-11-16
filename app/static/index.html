@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#10131a">
+<title>REDTEAM AI</title>
+<style>
+:root {
+    color-scheme: dark;
+    font-family: system-ui, sans-serif;
+    background: #10131a;
+    color: #edf0f5;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+}
+main {
+    width: 100%;
+    max-width: 850px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+header {
+    border-bottom: 1px solid #303744;
+    padding-bottom: 15px;
+}
+h1 { margin: 0; font-size: 25px; }
+.subtitle { color: #9ba6b8; font-size: 13px; }
+#status { color: #9ba6b8; font-size: 12px; margin-top: 8px; }
+#messages {
+    flex: 1;
+    padding: 18px 0;
+    overflow-y: auto;
+}
+.message {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.55;
+    padding: 13px 15px;
+    border-radius: 12px;
+    margin: 10px 0;
+}
+.user { background: #24344b; margin-left: 12%; }
+.assistant { background: #202631; margin-right: 5%; }
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    border-top: 1px solid #303744;
+    padding-top: 15px;
+}
+input, textarea, button {
+    width: 100%;
+    border: 1px solid #394353;
+    border-radius: 9px;
+    padding: 12px;
+    background: #1a202b;
+    color: #fff;
+    font: inherit;
+}
+textarea { resize: vertical; min-height: 75px; }
+button {
+    background: #2765b5;
+    border: 0;
+    font-weight: 600;
+    cursor: pointer;
+}
+button:disabled { opacity: .5; }
+.small { font-size: 12px; color: #9ba6b8; }
+</style>
+</head>
+<body>
+<main>
+<header>
+    <h1>REDTEAM AI</h1>
+    <div class="subtitle">Groq · SQLite · Pesquisa web · XEXPLOIT</div>
+    <div id="status">Conectando...</div>
+</header>
+
+<section id="messages" aria-live="polite">
+    <div class="message assistant">REDTEAM AI pronta. Informe seu token de acesso para começar.</div>
+</section>
+
+<section class="controls">
+    <input id="token" type="password" placeholder="Token de acesso REDTEAM_API_TOKEN" autocomplete="off">
+    <div class="small">O token fica somente nesta sessão do navegador.</div>
+    <textarea id="question" placeholder="Digite sua pergunta..."></textarea>
+    <button id="send">Enviar mensagem</button>
+</section>
+</main>
+
+<script>
+const tokenInput = document.getElementById("token");
+const questionInput = document.getElementById("question");
+const messages = document.getElementById("messages");
+const sendButton = document.getElementById("send");
+const statusText = document.getElementById("status");
+
+tokenInput.value = sessionStorage.getItem("redteam_token") || "";
+
+function addMessage(role, content) {
+    const element = document.createElement("div");
+    element.className = "message " + role;
+    element.textContent = content;
+    messages.appendChild(element);
+    messages.scrollTop = messages.scrollHeight;
+}
+
+async function request(path, options = {}) {
+    const token = tokenInput.value.trim();
+
+    if (!token) {
+        throw new Error("Informe o token de acesso.");
+    }
+
+    sessionStorage.setItem("redteam_token", token);
+
+    const response = await fetch(path, {
+        ...options,
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token,
+            ...(options.headers || {})
+        }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.detail || "Erro HTTP " + response.status);
+    }
+
+    return data;
+}
+
+async function updateStatus() {
+    try {
+        const data = await request("/api/status");
+        statusText.textContent =
+            "Online · " + data.modelo + " · " +
+            data.api + " · " + data.mensagens_persistentes +
+            " mensagens salvas";
+    } catch (error) {
+        statusText.textContent = "Status: " + error.message;
+    }
+}
+
+async function sendMessage() {
+    const question = questionInput.value.trim();
+
+    if (!question) return;
+
+    sendButton.disabled = true;
+    addMessage("user", question);
+    questionInput.value = "";
+
+    const loading = document.createElement("div");
+    loading.className = "message assistant";
+    loading.textContent = "Processando...";
+    messages.appendChild(loading);
+
+    try {
+        const data = await request("/api/chat", {
+            method: "POST",
+            body: JSON.stringify({question})
+        });
+
+        loading.textContent = data.answer;
+        statusText.textContent = "Resposta recebida.";
+    } catch (error) {
+        loading.textContent = "Erro: " + error.message;
+    } finally {
+        sendButton.disabled = false;
+        messages.scrollTop = messages.scrollHeight;
+        updateStatus();
+    }
+}
+
+sendButton.addEventListener("click", sendMessage);
+
+questionInput.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+});
+
+updateStatus();
+</script>
+</body>
+</html>
